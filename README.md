@@ -5,6 +5,7 @@ A simple customer service AI chatbot built with LangGraph that can answer freque
 ## Features
 
 - **FAQ Answering**: Answers customer questions using a comprehensive FAQ database
+- **Customer Reviews Analysis**: Analyzes customer reviews using vector store and semantic search
 - **Human Assistance**: Automatically forwards complex questions to human support via email
 - **CLI Interface**: Clean command-line interface with rich formatting
 - **LangGraph Agent**: Built using LangGraph for robust conversation flow
@@ -81,6 +82,10 @@ You: What are your business hours?
 
 Bot: We are open Monday through Friday from 9:00 AM to 6:00 PM EST, and Saturday from 10:00 AM to 4:00 PM EST. We are closed on Sundays and major holidays.
 
+You: How do customers feel about your wireless headphones?
+
+Bot: Based on customer reviews, customers have mixed feelings about our wireless headphones. The reviews show ratings ranging from 2/5 to 5/5 stars. Positive feedback highlights excellent sound quality, great noise cancellation, and long battery life. However, some customers have reported issues with connection drops, poor sound quality, and discomfort during extended use. The overall sentiment appears to be generally positive, with most reviews being 4-5 stars, but there are some valid concerns about reliability and comfort.
+
 You: Can you help me with a custom software development project?
 
 Bot: I'm sorry, but I don't have enough information to answer your question. 
@@ -92,9 +97,11 @@ Is there anything else I can help you with based on our frequently asked questio
 
 ## How It Works
 
-1. **Question Analysis**: The bot first determines if it can answer the question using the FAQ data
-2. **FAQ Retrieval**: If yes, it provides an answer based on the FAQ content
-3. **Human Assistance**: If no, it sends an email to the support team and informs the customer
+1. **Question Analysis**: The bot determines if it can answer using FAQ data or customer reviews
+2. **Data Retrieval**: 
+   - For FAQ questions: Provides answer based on FAQ content
+   - For review questions: Uses vector store to find relevant reviews and analyzes sentiment
+3. **Human Assistance**: If no data source can answer, it sends an email to the support team
 
 ## File Structure
 
@@ -102,6 +109,7 @@ Is there anything else I can help you with based on our frequently asked questio
 help_me_agent/
 ├── main.py          # Main application with LangGraph agent
 ├── faq.md           # Frequently Asked Questions database
+├── reviews.md       # Customer reviews database
 ├── requirements.txt # Python dependencies
 ├── env_template.txt # Environment variables template
 ├── README.md        # This file
@@ -113,6 +121,10 @@ help_me_agent/
 ### Adding More FAQs
 
 Edit `faq.md` to add more questions and answers. The bot will automatically use the updated content.
+
+### Adding Customer Reviews
+
+Edit `reviews.md` to add more customer reviews. The bot uses vector store and semantic search to analyze reviews and answer questions about customer sentiment, ratings, and experiences.
 
 ### Modifying Email Recipients
 
