@@ -134,18 +134,32 @@ class CustomerServiceBot:
     
     def _analyze_reviews_for_question(self, question: str) -> str:
         """
-        Analyze reviews to answer customer questions.
+        Analyze reviews to answer customer questions using semantic search and analysis.
         """
         if not self.reviews_vectorstore:
             return "No reviews data available."
         
-        # Search for relevant reviews
+        # Use semantic search to find relevant reviews
         relevant_reviews = self._search_reviews(question, k=10)
         
         if not relevant_reviews:
             return "No relevant reviews found for your question."
         
-        # Format reviews for analysis
+        # Enhance the search by also looking for similar questions/contexts
+        enhanced_query = self._enhance_search_query(question)
+        if enhanced_query != question:
+            additional_reviews = self._search_reviews(enhanced_query, k=5)
+            # Combine and deduplicate
+            all_reviews = relevant_reviews + additional_reviews
+            seen_content = set()
+            unique_reviews = []
+            for doc in all_reviews:
+                if doc.page_content not in seen_content:
+                    seen_content.add(doc.page_content)
+                    unique_reviews.append(doc)
+            relevant_reviews = unique_reviews[:10]  # Limit to top 10
+        
+        # Format reviews for analysis with similarity scores if available
         reviews_text = ""
         for i, doc in enumerate(relevant_reviews, 1):
             metadata = doc.metadata
@@ -156,29 +170,57 @@ class CustomerServiceBot:
             reviews_text += f"Content: {doc.page_content}\n"
             reviews_text += "-" * 50 + "\n"
         
-        # System prompt for LLM to analyze reviews
+        # Enhanced analysis prompt with more context
         analysis_prompt = f"""
 You are a customer service representative analyzing customer reviews to answer questions.
 
 Customer Question: {question}
 
-Relevant Customer Reviews:
+Relevant Customer Reviews (found using semantic search):
 {reviews_text}
 
 Instructions:
-- Analyze the provided reviews to answer the customer's question
-- If asked about sentiment, look for patterns in the reviews
-- If asked about ratings, calculate averages from the review data
-- If asked about specific products, focus on reviews for those products
-- Be honest about what the data shows
-- If there are conflicting opinions, mention both sides
-- Keep your response concise and helpful
+- Analyze the provided reviews to answer the customer's question comprehensively
+- If asked about sentiment, identify patterns, trends, and overall customer satisfaction
+- If asked about ratings, calculate averages, distributions, and highlight notable patterns
+- If asked about specific products, focus on reviews for those products and compare with others
+- If asked about experiences, summarize common themes and outliers
+- Be honest about what the data shows, including limitations
+- If there are conflicting opinions, present both sides fairly
+- Provide specific examples from the reviews when relevant
+- Keep your response helpful, balanced, and data-driven
+- If the question is about a product not well-represented in the reviews, mention this limitation
 
 Answer the customer's question based on the review analysis:
 """
         
         response = self.llm.invoke([SystemMessage(content=analysis_prompt)])
         return response.content
+    
+    def _enhance_search_query(self, question: str) -> str:
+        """
+        Enhance the search query to find more relevant reviews using LLM.
+        """
+        enhancement_prompt = f"""
+Given this customer question, generate alternative search queries that would help find relevant customer reviews.
+
+Original Question: "{question}"
+
+Generate 1-2 alternative search queries that:
+- Use different wording but mean the same thing
+- Focus on key concepts that might appear in reviews
+- Use synonyms or related terms
+
+Respond with just the alternative queries, separated by newlines.
+"""
+        
+        try:
+            response = self.llm.invoke([SystemMessage(content=enhancement_prompt)])
+            enhanced_queries = response.content.strip().split('\n')
+            # Return the first enhanced query, or original if none generated
+            return enhanced_queries[0].strip() if enhanced_queries[0].strip() else question
+        except Exception:
+            return question  # Return original if enhancement fails
     
     def _send_assistance_email(self, customer_inquiry: str) -> bool:
         """
@@ -229,21 +271,84 @@ Timestamp: {datetime.now().isoformat()}
     def _can_answer_question(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Check if the question can be answered using FAQ data or customer reviews.
+        Uses semantic analysis to determine question type and answerability.
         """
         user_question = state["messages"][-1].content
         
-        # Determine if this is a reviews-related question
-        reviews_keywords = [
-            "review", "reviews", "rating", "ratings", "customer", "customers",
-            "feedback", "opinion", "opinions", "experience", "experiences",
-            "satisfied", "happy", "unhappy", "disappointed", "love", "hate",
-            "recommend", "quality", "service", "product", "feel", "think"
-        ]
+        # Semantic classification of question type
+        classification_prompt = f"""
+You are a customer service question classifier. Analyze the following customer question and determine:
+
+1. Can this question be answered using FAQ data?
+2. Is this question asking about customer reviews, ratings, feedback, or experiences?
+3. What type of question is this?
+
+Customer Question: "{user_question}"
+
+FAQ Data Available:
+{self.faq_data[:500]}...
+
+Respond in exactly this JSON format:
+{{
+    "faq_can_answer": true/false,
+    "is_reviews_question": true/false,
+    "question_type": "faq" or "reviews" or "both" or "neither",
+    "confidence": 0.0-1.0
+}}
+
+Guidelines:
+- FAQ questions: policies, procedures, business hours, shipping, returns, contact info
+- Reviews questions: asking about customer opinions, ratings, experiences, satisfaction, feedback
+- "both": could be answered by either source
+- "neither": requires human assistance
+- Be conservative with confidence scores
+"""
         
-        is_reviews_question = any(keyword in user_question.lower() for keyword in reviews_keywords)
-        
-        # Check if FAQ can answer it
-        faq_prompt = f"""
+        try:
+            classification_response = self.llm.invoke([SystemMessage(content=classification_prompt)])
+            
+            # Parse the JSON response
+            import json
+            classification = json.loads(classification_response.content.strip())
+            
+            faq_can_answer = classification.get("faq_can_answer", False)
+            is_reviews_question = classification.get("is_reviews_question", False)
+            question_type = classification.get("question_type", "neither")
+            confidence = classification.get("confidence", 0.0)
+            
+            # Determine if we can answer and how
+            if question_type == "faq" and faq_can_answer:
+                state["can_answer"] = True
+                state["question_type"] = "faq"
+            elif question_type == "reviews" and is_reviews_question and self.reviews_vectorstore:
+                state["can_answer"] = True
+                state["question_type"] = "reviews"
+            elif question_type == "both" and (faq_can_answer or self.reviews_vectorstore):
+                # Prioritize FAQ if both can answer
+                state["can_answer"] = True
+                state["question_type"] = "faq" if faq_can_answer else "reviews"
+            else:
+                state["can_answer"] = False
+                state["question_type"] = "neither"
+            
+            # Store confidence for debugging/logging
+            state["classification_confidence"] = confidence
+            
+        except (json.JSONDecodeError, Exception) as e:
+            # Fallback to simple keyword matching if semantic classification fails
+            console.print(f"[yellow]Warning: Semantic classification failed, using fallback: {str(e)}[/yellow]")
+            
+            reviews_keywords = [
+                "review", "reviews", "rating", "ratings", "customer", "customers",
+                "feedback", "opinion", "opinions", "experience", "experiences",
+                "satisfied", "happy", "unhappy", "disappointed", "love", "hate",
+                "recommend", "quality", "service", "product", "feel", "think"
+            ]
+            
+            is_reviews_question = any(keyword in user_question.lower() for keyword in reviews_keywords)
+            
+            # Simple FAQ check as fallback
+            faq_prompt = f"""
 FAQ Data:
 {self.faq_data}
 
@@ -251,16 +356,19 @@ Customer Question: {user_question}
 
 Can the FAQ data answer this question? Respond with "yes" or "no" only.
 """
-        
-        faq_response = self.llm.invoke([SystemMessage(content=faq_prompt)])
-        faq_can_answer = faq_response.content.strip().lower() == "yes"
-        
-        # Determine routing
-        if faq_can_answer or (is_reviews_question and self.reviews_vectorstore):
-            state["can_answer"] = True
-            state["question_type"] = "reviews" if is_reviews_question and not faq_can_answer else "faq"
-        else:
-            state["can_answer"] = False
+            
+            faq_response = self.llm.invoke([SystemMessage(content=faq_prompt)])
+            faq_can_answer = faq_response.content.strip().lower() == "yes"
+            
+            # Determine routing
+            if faq_can_answer or (is_reviews_question and self.reviews_vectorstore):
+                state["can_answer"] = True
+                state["question_type"] = "reviews" if is_reviews_question and not faq_can_answer else "faq"
+            else:
+                state["can_answer"] = False
+                state["question_type"] = "neither"
+            
+            state["classification_confidence"] = 0.5  # Lower confidence for fallback
         
         return state
     

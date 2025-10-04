@@ -1,11 +1,11 @@
-# Customer Service AI Chatbot
+# HelpMeAgent
 
-A simple customer service AI chatbot built with LangGraph that can answer frequently asked questions and request human assistance when needed.
+A simple customer service AI chatbot built with LangGraph that can answer frequently asked questions, analyze customer reviews, and request human assistance when needed.
 
 ## Features
 
 - **FAQ Answering**: Answers customer questions using a comprehensive FAQ database
-- **Customer Reviews Analysis**: Analyzes customer reviews using vector store and semantic search
+- **Customer Reviews Analysis**: Analyzes customer reviews using advanced semantic search and LLM-powered classification
 - **Human Assistance**: Automatically forwards complex questions to human support via email
 - **CLI Interface**: Clean command-line interface with rich formatting
 - **LangGraph Agent**: Built using LangGraph for robust conversation flow
@@ -38,7 +38,7 @@ SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
 EMAIL_USERNAME=your_email@gmail.com
 EMAIL_PASSWORD=your_app_password_here
-ASSISTANCE_EMAIL=lzhouzyj@gmail.com
+ASSISTANCE_EMAIL=assistance_email@gmail.com
 ```
 
 **Required Environment Variables:**
@@ -74,7 +74,7 @@ The bot will start and you can begin chatting. Type `quit` to exit.
 ### Example Conversation
 
 ```
-🤖 Welcome
+Welcome
 Customer Service AI Chatbot
 Ask me anything! Type 'quit' to exit.
 
@@ -97,11 +97,12 @@ Is there anything else I can help you with based on our frequently asked questio
 
 ## How It Works
 
-1. **Question Analysis**: The bot determines if it can answer using FAQ data or customer reviews
-2. **Data Retrieval**: 
-   - For FAQ questions: Provides answer based on FAQ content
-   - For review questions: Uses vector store to find relevant reviews and analyzes sentiment
-3. **Human Assistance**: If no data source can answer, it sends an email to the support team
+1. **Semantic Question Classification**: The bot uses LLM-powered classification to determine question type and answerability
+2. **Intelligent Routing**: 
+   - FAQ questions: Provides answer based on FAQ content
+   - Review questions: Uses advanced semantic search to find relevant reviews and analyzes sentiment
+3. **Enhanced Search**: Employs query expansion and semantic similarity for better review matching
+4. **Human Assistance**: If no data source can answer, it sends an email to the support team
 
 ## File Structure
 
@@ -124,7 +125,12 @@ Edit `faq.md` to add more questions and answers. The bot will automatically use 
 
 ### Adding Customer Reviews
 
-Edit `reviews.md` to add more customer reviews. The bot uses vector store and semantic search to analyze reviews and answer questions about customer sentiment, ratings, and experiences.
+Edit `reviews.md` to add more customer reviews. The bot uses advanced semantic analysis including:
+
+- **LLM-Powered Classification**: Automatically determines if questions are about reviews vs. FAQs
+- **Semantic Search**: Finds relevant reviews even when customers use different wording
+- **Query Enhancement**: Generates alternative search terms to find more relevant reviews
+- **Sentiment Analysis**: Provides comprehensive analysis of customer opinions and experiences
 
 ### Modifying Email Recipients
 
